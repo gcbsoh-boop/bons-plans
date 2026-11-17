@@ -301,7 +301,7 @@ hist.forEach(h=>{if(mini===null||h[4]<mini){mini=h[4];quand=h[0]}parJour[h[0]]=M
 const pts=Object.keys(parJour).sort().map(d=>[d,parJour[d]]);
 const c=el('div','souhait'),t=el('div','tete');t.append(el('h3','',q));
 const x=el('button','x','✕');x.title='Retirer';x.setAttribute('aria-label','Retirer '+q);x.onclick=()=>{const l=lire();l.splice(i,1);ecrire(l);rendre()};t.append(x);c.append(t);
-const [k,txt]=conseil(cat,courant,mini,actuels.length>0);c.append(el('div','conseil '+k,txt));
+const [k,txt]=conseil(cat,courant,pts.length>=14?mini:null,actuels.length>0);c.append(el('div','conseil '+k,txt));
 if(mini!==null)c.append(el('p','petit','Prix le plus bas vu : '+eur(mini)+' ('+jolie(quand)+')'));
 if(pts.length>=2)c.append(spark(pts));
 if(actuels.length){const u=el('ul');actuels.slice(0,5).forEach(d=>{const li=el('li');const a=el('a','',d.titre.replace(/^(\s*\[[^\]]*\])+\s*/,'').slice(0,90));a.href=d.lien;a.target='_blank';a.rel='noopener noreferrer';li.append(a);if(d.prix!==null)li.append(document.createTextNode(' — '),el('b','',eur(d.prix)));if(d.magasin)li.append(document.createTextNode(' · '+d.magasin));u.append(li)});c.append(u)}

@@ -7,6 +7,26 @@ const UA = 'bons-plans-perso/1.0';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const lireJson = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), 'utf8').replace(/^﻿/, ''));
 
+// ---------- 0. Comptes (Supabase, facultatif) ----------
+// Valeurs PUBLIQUES seulement (URL + clé anon). Sans elles, le site fonctionne comme avant.
+function configSupabase() {
+  let url = process.env.SUPABASE_URL || '', key = process.env.SUPABASE_ANON_KEY || '';
+  if (!url || !key) {
+    try { const j = lireJson('supabase.json'); url = url || j.SUPABASE_URL || ''; key = key || j.SUPABASE_ANON_KEY || ''; } catch { /* pas de fichier */ }
+  }
+  url = String(url).trim().replace(/[/]+$/, ''); key = String(key).trim();
+  if (!/^https:[/][/][A-Za-z0-9.-]+$/.test(url) || key.length < 20 || !/^[A-Za-z0-9._-]+$/.test(key)) return null;
+  // Garde-fou : jamais une clé secrète dans une page publique
+  let role = '';
+  try { role = JSON.parse(Buffer.from(key.split('.')[1] || '', 'base64url').toString('utf8')).role || ''; } catch { /* clé non JWT */ }
+  if (role === 'service_role' || key.startsWith('sb_secret_')) {
+    console.error('ATTENTION : une clé secrète a été fournie à la place de la clé publique. Comptes désactivés.');
+    return null;
+  }
+  return { url, key };
+}
+const SB = configSupabase();
+
 // ---------- 1. Téléchargement ----------
 async function telecharger(url) {
   for (let essai = 1; essai <= 3; essai++) {
@@ -219,12 +239,17 @@ footer.pied a{color:var(--sec)}
 .conseil.vert{background:var(--vert)}.conseil.orange{background:#d9780f}.conseil.gris{background:#6b7380}
 .souhait ul{list-style:none;margin:8px 0 0;padding:0}.souhait li{padding:6px 0;border-top:1px solid var(--ligne)}
 .souhait li a{color:var(--txt);text-decoration:none}.souhait li b{color:var(--acc)}
+.boite{background:var(--carte);border:1px solid var(--ligne);border-radius:16px;padding:14px 16px;margin:12px 0 20px}.boite h2,.boite h3{margin:4px 0 8px}
+.ligne{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.ligne input{flex:1;min-width:200px;font:inherit;padding:12px;border:2px solid var(--ligne);border-radius:12px;background:var(--bg,var(--carte));color:var(--txt)}
+.boite button{font:inherit;font-weight:700;padding:10px 16px;border:0;border-radius:12px;background:var(--acc);color:#fff;cursor:pointer;margin:4px 6px 4px 0}.boite button.sec{background:none;color:var(--acc);border:1px solid var(--acc)}
+.etapes{padding-left:22px}.etapes li{margin:8px 0}code.sujet{background:var(--ligne);padding:2px 8px;border-radius:8px;word-break:break-all}.bascule{display:block;margin:10px 0;font-weight:600}
 .petit{color:var(--sec);font-size:.95rem;margin:4px 0}.spark{display:block;margin:6px 0}
 `;
 const menuSite = (actif, local) => '<nav class="menu" aria-label="Navigation principale">' +
   (local ? [['bons-plans.html', 'Aubaines', 'a'], ['souhaits.html', 'Ma liste', 's']]
     : [['index.html', 'Aubaines', 'a'], ['souhaits.html', 'Ma liste', 's'], ['a-propos.html', 'À propos', 'p'], ['confidentialite.html', 'Confidentialité', 'c']])
-    .map(([h, t, k]) => '<a href="' + h + '"' + (k === actif ? ' aria-current="page"' : '') + '>' + t + '</a>').join('') + '</nav>';
+    .map(([h, t, k]) => '<a href="' + h + '"' + (k === actif ? ' aria-current="page"' : '') + '>' + t + '</a>').join('') +
+  (SB ? '<a href="souhaits.html#compte" id="lien-compte">Se connecter</a>' : '') + '</nav>';
 const piedSite = '<footer class="pied"><p>' + DIVULGATION + '</p><p>Bons Plans Canada · <a href="a-propos.html">À propos</a> · <a href="confidentialite.html">Confidentialité</a></p></footer>';
 const DESC_SITE = 'Les meilleures aubaines au Canada, triées pour vous, mises à jour chaque heure.';
 function pageSite(titre, actif, corps, local) {
@@ -239,6 +264,7 @@ function pageSite(titre, actif, corps, local) {
 // ---------- 5c. Historique des prix et page « Ma liste » ----------
 const JOURS_HISTO = 365;
 const jourDe = (t) => new Date(t).toISOString().slice(0, 10);
+let NOUVEAUX = [];
 function majHistorique(deals, maintenant) {
   const f = path.join(DIR, 'historique.json');
   let h = [];
@@ -253,6 +279,7 @@ function majHistorique(deals, maintenant) {
     const x = { d: auj, t: d.titre, c: d.categorie, m: d.magasin, p: d.prix, o: d.pct, l: d.lien };
     if (vus.has(cle(x))) continue;
     vus.add(cle(x)); h.push(x); ajouts++;
+    NOUVEAUX.push({ titre: d.titre, lien: d.lien, prix: d.prix, magasin: d.magasin });
   }
   fs.writeFileSync(f, JSON.stringify(h));
   console.error('Historique : ' + h.length + ' offres (+' + ajouts + ')');
@@ -260,7 +287,8 @@ function majHistorique(deals, maintenant) {
   return h.filter((x) => x.p !== null && x.p !== undefined).map((x) => [x.d, x.t.slice(0, 110), x.c, x.m, x.p, x.o]);
 }
 const CORPS_SOUHAITS = String.raw`<h1>Ma liste de souhaits</h1>
-<p class="petit">Écrivez un produit avec vos mots (ex. : télé 55, rtx 4070). On le surveille pour vous. Votre liste reste dans ce navigateur : aucun compte.</p>
+<p class="petit" id="intro">Écrivez un produit avec vos mots (ex. : télé 55, rtx 4070). On le surveille pour vous. Votre liste reste dans ce navigateur : aucun compte.</p>
+<section id="compte"></section><script type="application/json" id="config-sb">__SB__</script>
 <form id="ajout"><input id="mot" type="text" placeholder="Que voulez-vous acheter ?" aria-label="Produit" autocomplete="off"><button type="submit">Ajouter</button></form>
 <div id="souhaits"></div>
 <p class="petit">Les conseils sont des tendances générales, pas une garantie.</p>
@@ -274,7 +302,6 @@ const mre=m=>new RegExp('(^|[^a-z0-9])'+esc(norm(m.trim()))+'(?![a-z0-9])');
 function classer(t){t=norm(t);let best='',max=0;for(const c of D.cfg.ordre_priorite||Object.keys(D.cfg.categories)){const n=(D.cfg.categories[c]||[]).filter(m=>mre(m).test(t)).length;if(n>max){max=n;best=c}}return best}
 function mots(q){return norm(q).split(/[^a-z0-9]+/).filter(Boolean).map(w=>new RegExp('(^|[^a-z0-9])'+esc(w)))}
 const tout=(res,t)=>{t=norm(t);return res.every(r=>r.test(t))};
-function lire(){try{const l=JSON.parse(localStorage.getItem('souhaits')||'[]');return Array.isArray(l)?l:[]}catch(e){return window.__l||[]}}
 function ecrire(l){window.__l=l;try{localStorage.setItem('souhaits',JSON.stringify(l))}catch(e){}}
 function el(tag,cl,txt){const e=document.createElement(tag);if(cl)e.className=cl;if(txt!==undefined)e.textContent=txt;return e}
 const eur=v=>v.toFixed(2).replace('.',',')+' $';
@@ -300,7 +327,7 @@ let mini=null,quand='';const parJour={};
 hist.forEach(h=>{if(mini===null||h[4]<mini){mini=h[4];quand=h[0]}parJour[h[0]]=Math.min(parJour[h[0]]??Infinity,h[4])});
 const pts=Object.keys(parJour).sort().map(d=>[d,parJour[d]]);
 const c=el('div','souhait'),t=el('div','tete');t.append(el('h3','',q));
-const x=el('button','x','✕');x.title='Retirer';x.setAttribute('aria-label','Retirer '+q);x.onclick=()=>{const l=lire();l.splice(i,1);ecrire(l);rendre()};t.append(x);c.append(t);
+const x=el('button','x','✕');x.title='Retirer';x.setAttribute('aria-label','Retirer '+q);x.onclick=()=>retirer(i);t.append(x);c.append(t);
 const [k,txt]=conseil(cat,courant,pts.length>=14?mini:null,actuels.length>0);c.append(el('div','conseil '+k,txt));
 if(mini!==null)c.append(el('p','petit','Prix le plus bas vu : '+eur(mini)+' ('+jolie(quand)+')'));
 if(pts.length>=2)c.append(spark(pts));
@@ -309,11 +336,88 @@ return c}
 function rendre(){const z=document.getElementById('souhaits');z.innerHTML='';const l=lire();
 if(!l.length){z.append(el('p','petit','Votre liste est vide. Ajoutez un produit ci-dessus.'));return}
 l.forEach((q,i)=>z.append(carte(q,i)))}
-document.getElementById('ajout').onsubmit=e=>{e.preventDefault();const i=document.getElementById('mot'),v=i.value.trim();if(!v)return;const l=lire();if(!l.includes(v))l.push(v);ecrire(l);i.value='';rendre()};
-(D.hist?Promise.resolve(D.hist):fetch('historique.json').then(r=>r.json()).catch(()=>[])).then(h=>{D.hist=h;rendre()});
+document.getElementById('ajout').onsubmit=e=>{e.preventDefault();const i=document.getElementById('mot'),v=i.value.trim();if(!v)return;i.value='';ajouter(v)};
+const CFG=JSON.parse(document.getElementById('config-sb').textContent||'{}');
+let SBC=null,SBU=null,SBL=[],PROFIL=null;
+function lireLocal(){try{const l=JSON.parse(localStorage.getItem('souhaits')||'[]');return Array.isArray(l)?l:[]}catch(e){return window.__l||[]}}
+function lire(){return SBU?SBL.map(s=>s.texte):lireLocal()}
+function erreur(m){const z=document.getElementById('msg-compte');if(z)z.textContent=m||'Oups, un problème est survenu. Réessayez dans un instant.'}
+async function charger(){const r=await SBC.from('souhaits').select('id,texte').order('cree_le',{ascending:true});if(r.error){erreur();return false}SBL=r.data||[];return true}
+async function retirer(i){
+if(!SBU){const l=lire();l.splice(i,1);ecrire(l);rendre();return}
+const s=SBL[i];if(!s)return;const r=await SBC.from('souhaits').delete().eq('id',s.id);if(r.error){erreur();return}await charger();rendre()}
+async function ajouter(v){
+if(!SBU){const l=lire();if(!l.includes(v))l.push(v);ecrire(l);rendre();return}
+if(SBL.some(s=>s.texte===v))return;
+const r=await SBC.from('souhaits').insert({texte:v.slice(0,100)});if(r.error){erreur('Impossible d’ajouter (limite de 50 souhaits ?).');return}await charger();rendre()}
+function lienCompte(t){const a=document.getElementById('lien-compte');if(a)a.textContent=t}
+function chargerScript(src,sri){return new Promise((ok,ko)=>{const s=document.createElement('script');s.src=src;if(sri){s.integrity=sri;s.crossOrigin='anonymous'}s.onload=ok;s.onerror=ko;document.head.append(s)})}
+async function initCompte(){
+if(!CFG.url||!CFG.key)return;
+document.getElementById('intro').textContent='Écrivez un produit avec vos mots (ex. : télé 55, rtx 4070). On le surveille pour vous. Sans compte, votre liste reste dans ce navigateur. Avec un compte (gratuit), elle vous suit partout et vous pouvez recevoir des alertes.';
+try{await chargerScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js','sha256-hZaWX+kY5lZgChtWjToWj1wNPSKmAIhrtvRKZVXbAec=');
+SBC=window.supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}})}
+catch(e){const z=document.getElementById('compte');z.className='boite';z.textContent='Les comptes sont indisponibles pour le moment. Votre liste locale fonctionne toujours.';return}
+SBC.auth.onAuthStateChange((ev)=>{if(ev==='SIGNED_IN'||ev==='SIGNED_OUT'||ev==='USER_UPDATED')setTimeout(appliquer,0)});
+appliquer()}
+async function appliquer(){
+const r=await SBC.auth.getSession();const u=r.data&&r.data.session?r.data.session.user:null;
+if(u&&SBU&&u.id===SBU.id)return;
+SBU=u;SBL=[];PROFIL=null;
+if(SBU){await charger();await chargerProfil()}
+lienCompte(SBU?'Mon compte':'Se connecter');dessinerCompte();rendre()}
+async function chargerProfil(){
+let r=await SBC.from('profils').select('ntfy_sujet,alertes_actives').maybeSingle();
+if(!r.error&&!r.data){await SBC.from('profils').insert({});r=await SBC.from('profils').select('ntfy_sujet,alertes_actives').maybeSingle()}
+PROFIL=r.error?null:r.data}
+function dessinerCompte(){
+const z=document.getElementById('compte');z.innerHTML='';z.className='boite';
+const msg=el('p','petit');msg.id='msg-compte';msg.setAttribute('role','status');
+if(!SBU){
+z.append(el('h2','','Se connecter (facultatif)'));
+z.append(el('p','petit','Entrez votre courriel : on vous envoie un lien de connexion. Pas de mot de passe.'));
+const f=el('form','ligne'),i=el('input');i.type='email';i.required=true;i.placeholder='votre@courriel.com';i.autocomplete='email';i.setAttribute('aria-label','Courriel');
+const b=el('button','','Recevoir mon lien');b.type='submit';f.append(i,b);
+f.onsubmit=async e=>{e.preventDefault();b.disabled=true;msg.textContent='Envoi en cours…';
+const r=await SBC.auth.signInWithOtp({email:i.value.trim(),options:{emailRedirectTo:location.href.split('#')[0].split('?')[0]}});
+b.disabled=false;msg.textContent=r.error?'Impossible d’envoyer le lien. Vérifiez le courriel et réessayez.':'C’est envoyé ! Ouvrez votre courriel et cliquez sur le lien (pensez à regarder les indésirables).'};
+z.append(f,msg);return}
+z.append(el('h2','','Mon compte'));
+z.append(el('p','petit','Connecté : '+(SBU.email||'')));
+const loc=lireLocal();
+if(loc.length&&!localStorage.getItem('import-fait')){
+const o=el('div','avis');o.append(el('p','','Vous avez '+loc.length+' souhait'+(loc.length>1?'s':'')+' sur cet appareil. Les ajouter à votre compte ?'));
+const oui=el('button','','Oui, les ajouter'),non=el('button','sec','Non merci');
+oui.onclick=async()=>{const ex=new Set(SBL.map(s=>s.texte));const nv=loc.filter(t=>!ex.has(t)).slice(0,50).map(t=>({texte:String(t).slice(0,100)}));
+if(nv.length){const r=await SBC.from('souhaits').insert(nv);if(r.error){erreur('Import impossible (limite de 50 souhaits ?).');return}}
+try{localStorage.removeItem('souhaits');localStorage.setItem('import-fait','1')}catch(e){}await charger();dessinerCompte();rendre()};
+non.onclick=()=>{try{localStorage.setItem('import-fait','1')}catch(e){}dessinerCompte()};
+o.append(oui,non);z.append(o)}
+z.append(alertes());
+const q=el('button','sec','Se déconnecter');q.onclick=async()=>{await SBC.auth.signOut();SBU=null;SBL=[];PROFIL=null;lienCompte('Se connecter');dessinerCompte();rendre()};
+z.append(q,msg)}
+function alertes(){
+const s=el('div','alertes');s.append(el('h3','','Alertes sur votre téléphone'));
+if(!PROFIL){s.append(el('p','petit','Les alertes ne sont pas encore prêtes. Réessayez dans un instant.'));return s}
+const ol=el('ol','etapes');
+ol.append(el('li','','Installez l’app gratuite « ntfy » sur votre téléphone (Android ou iPhone).'));
+const l2=el('li','','Dans l’app, touchez « S’abonner », puis entrez ce nom de sujet privé : ');
+const code=el('code','sujet',PROFIL.ntfy_sujet);l2.append(code);
+const cp=el('button','sec','Copier');cp.type='button';cp.onclick=async()=>{try{await navigator.clipboard.writeText(PROFIL.ntfy_sujet);cp.textContent='Copié !'}catch(e){cp.textContent='Copie impossible'}setTimeout(()=>cp.textContent='Copier',2000)};
+const ln=el('a','','Ouvrir ntfy.sh/'+PROFIL.ntfy_sujet);ln.href='https://ntfy.sh/'+encodeURIComponent(PROFIL.ntfy_sujet);ln.target='_blank';ln.rel='noopener noreferrer';
+const d=el('div','petit');d.append(cp,document.createTextNode(' '),ln);l2.append(d);ol.append(l2);
+ol.append(el('li','','Gardez les alertes activées ci-dessous. Vous serez prévenu quand un nouveau bon plan correspond à un de vos souhaits.'));
+s.append(ol);
+const lab=el('label','bascule'),cb=el('input');cb.type='checkbox';cb.checked=!!PROFIL.alertes_actives;
+cb.onchange=async()=>{const r=await SBC.from('profils').update({alertes_actives:cb.checked}).eq('user_id',SBU.id);if(r.error){cb.checked=!cb.checked;erreur()}else{PROFIL.alertes_actives=cb.checked;erreur(cb.checked?'Alertes activées.':'Alertes désactivées.')}};
+lab.append(cb,document.createTextNode(' Alertes activées'));s.append(lab);
+s.append(el('p','petit','Ce nom de sujet est privé : ne le partagez pas. Maximum 5 alertes par vérification.'));
+return s}
+(D.hist?Promise.resolve(D.hist):fetch('historique.json').then(r=>r.json()).catch(()=>[])).then(h=>{D.hist=h;rendre();initCompte()});
 </script>`;
 function pageSouhaits(donnees, local) {
-  return pageSite('Ma liste', 's', CORPS_SOUHAITS.replace('__DONNEES__', () => donnees), local);
+  const sb = JSON.stringify(SB || {}).replace(/</g, '\x5Cu003c').replace(/>/g, '\x5Cu003e');
+  return pageSite('Ma liste', 's', CORPS_SOUHAITS.replace('__DONNEES__', () => donnees).replace('__SB__', () => sb), local);
 }
 const CORPS_APROPOS = `<h1>À propos</h1>
 <p><strong>Bons Plans Canada</strong> est un petit site gratuit qui rassemble les meilleures aubaines trouvées au Canada, pour aider les consommateurs à ne pas payer plus cher que nécessaire.</p>
@@ -327,14 +431,33 @@ const CORPS_APROPOS = `<h1>À propos</h1>
 <p class="avis">Courriel : <a href="mailto:christiansoh771@gmail.com"><strong>christiansoh771@gmail.com</strong></a></p>`;
 const CORPS_CONFID = `<h1>Politique de confidentialité</h1>
 <p>Dernière mise à jour : <span id="d">novembre 2026</span>. Cette politique est rédigée dans l’esprit de la LPRPDE (Canada) et de la Loi 25 (Québec).</p>
-<h2>Ce que nous collectons</h2>
-<p>Rien. Le site n’a pas de compte utilisateur, pas de formulaire et ne collecte aucun renseignement personnel. La recherche et les filtres fonctionnent uniquement dans votre navigateur : ce que vous tapez n’est pas envoyé à nos serveurs.</p>
+<h2>Sans compte</h2>
+<p>Vous pouvez utiliser le site sans compte. Dans ce cas, nous ne collectons aucun renseignement personnel. La recherche, les filtres et votre liste de souhaits restent dans votre navigateur (stockage local) : rien n’est envoyé à nos serveurs. Vous pouvez les effacer en vidant les données du site dans votre navigateur.</p>
+<h2>Avec un compte (facultatif)</h2>
+<p>La création d’un compte est facultative. Vous vous connectez par un lien envoyé à votre courriel (sans mot de passe). Nous conservons, pour chaque compte :</p>
+<ul>
+<li>votre adresse courriel ;</li>
+<li>les articles de votre liste de souhaits (du texte) ;</li>
+<li>un sujet de notification privé, choisi au hasard ;</li>
+<li>votre choix d’activer ou non les alertes ;</li>
+<li>les liens des offres déjà envoyées en alerte.</li>
+</ul>
+<h2>Pourquoi nous les utilisons</h2>
+<p>Seulement pour : vous connecter, garder votre liste de souhaits d’un appareil à l’autre, et vous envoyer des alertes quand une offre correspond à votre liste. Nous ne vendons pas vos renseignements et ne les utilisons pas pour de la publicité. En créant un compte, vous consentez à cet usage. Vous pouvez retirer votre consentement en supprimant votre compte.</p>
+<h2>Alertes et ntfy.sh</h2>
+<p>Les alertes sont des notifications envoyées par le service public ntfy.sh, vers votre sujet privé au hasard. Sur ntfy.sh, le nom d’un sujet n’est pas secret : toute personne qui le connaît peut lire les alertes. Ne partagez donc pas votre sujet. Les alertes contiennent des offres publiques, pas vos renseignements personnels. ntfy.sh est un service tiers qui a sa propre politique.</p>
+<h2>Où sont gardées les données</h2>
+<p>Les données de compte sont hébergées par Supabase. La région du serveur est choisie à la création du projet, idéalement le Canada (centre) ou les États-Unis. Vos renseignements peuvent donc être traités hors du Québec et du Canada, et être soumis aux lois de ces pays. Il en va de même pour ntfy.sh. En créant un compte, vous en êtes informé.</p>
 <h2>Témoins (cookies) et suivi</h2>
-<p>Nous n’utilisons aucun témoin de suivi, aucune publicité ciblée et aucun outil d’analyse tiers.</p>
+<p>Nous n’utilisons aucun témoin de suivi, aucune publicité et aucun outil d’analyse. Si vous vous connectez, Supabase garde dans votre navigateur un jeton de session, nécessaire pour rester connecté. Il est effacé quand vous vous déconnectez.</p>
+<h2>Combien de temps nous les gardons</h2>
+<p>Vos données de compte sont gardées tant que le compte existe, puis supprimées à sa suppression. Les liens des offres déjà envoyées en alerte sont gardés 90 jours, puis effacés.</p>
 <h2>Liens affiliés et sites externes</h2>
 <p>${DIVULGATION} Lorsque vous cliquez sur un lien vers un marchand ou un réseau d’affiliation, ce site externe peut déposer ses propres témoins et appliquer sa propre politique de confidentialité. Nous ne contrôlons pas ces sites.</p>
 <h2>Vos droits</h2>
-<p>Comme nous ne détenons aucun renseignement personnel vous concernant, il n’y a rien à consulter, corriger ou supprimer. Pour toute question : <a href="mailto:christiansoh771@gmail.com"><strong>christiansoh771@gmail.com</strong></a>.</p>`;
+<p>Vous pouvez demander l’accès à vos renseignements, leur correction ou leur suppression. Écrivez-nous par courriel : nous répondons et supprimons votre compte dans un délai de 30 jours.</p>
+<h2>Responsable des renseignements personnels</h2>
+<p>Le responsable est le propriétaire du site. Pour toute question ou plainte : <a href="mailto:christiansoh771@gmail.com"><strong>christiansoh771@gmail.com</strong></a>.</p>`;
 function ecrireSite(donnees, souhaits, histCompact) {
   const dossier = path.join(DIR, 'site');
   fs.mkdirSync(dossier, { recursive: true });
@@ -388,6 +511,7 @@ async function main() {
   const ordre = R.ordre.concat('Autre').filter((v, i, a) => a.indexOf(v) === i);
   const donnees = JSON.stringify({ deals, ordre, genere: maintenant }).replace(/</g, '\\u003c');
   const histCompact = majHistorique(deals, maintenant);
+  fs.writeFileSync(path.join(DIR, 'nouveaux.json'), JSON.stringify(NOUVEAUX)); // lu par alertes.js
   const cal = lireJson('calendrier.json');
   const base = { deals: deals.map((d) => ({ titre: d.titre, lien: d.lien, prix: d.prix, magasin: d.magasin })), cal, cfg: { categories: cfg.categories, ordre_priorite: cfg.ordre_priorite } };
   const sjson = (o) => JSON.stringify(o).replace(/</g, '\\u003c');

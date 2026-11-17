@@ -198,6 +198,65 @@ const m=Math.round((Date.now()-D.genere)/6e4);$('#maj').textContent='Mis à jour
 rendre();
 </script></body></html>`;
 
+// ---------- 5b. Site public (dossier site/) ----------
+const DIVULGATION = 'Certains liens peuvent être des liens affiliés : nous pouvons recevoir une commission, sans coût supplémentaire pour vous.';
+const CSS_SITE = `
+nav.menu{display:flex;flex-wrap:wrap;gap:6px 20px;justify-content:center;padding:14px 0;border-bottom:1px solid var(--ligne)}
+nav.menu a{color:var(--txt);text-decoration:none;font-weight:600;padding:6px 2px;border-bottom:2px solid transparent}
+nav.menu a:hover,nav.menu a[aria-current]{border-bottom-color:var(--acc)}
+.hero{font-size:1.15rem;color:var(--sec);margin:0 auto 12px;max-width:640px}
+footer.pied{margin-top:40px;padding-top:18px;border-top:1px solid var(--ligne);color:var(--sec);font-size:.95rem;text-align:center}
+footer.pied a{color:var(--sec)}
+.texte{max-width:760px;margin:0 auto;padding:8px 0}.texte h1{margin-top:28px}.texte a{color:var(--acc)}
+.avis{background:var(--carte);border:1px dashed var(--acc);border-radius:12px;padding:12px 16px}
+`;
+const menuSite = (actif) => '<nav class="menu" aria-label="Navigation principale">' +
+  [['index.html', 'Aubaines', 'a'], ['a-propos.html', 'À propos', 'p'], ['confidentialite.html', 'Confidentialité', 'c']]
+    .map(([h, t, k]) => '<a href="' + h + '"' + (k === actif ? ' aria-current="page"' : '') + '>' + t + '</a>').join('') + '</nav>';
+const piedSite = '<footer class="pied"><p>' + DIVULGATION + '</p><p>Bons Plans Canada · <a href="a-propos.html">À propos</a> · <a href="confidentialite.html">Confidentialité</a></p></footer>';
+const DESC_SITE = 'Les meilleures aubaines au Canada, triées pour vous, mises à jour chaque heure.';
+function pageSite(titre, actif, corps) {
+  return '<!DOCTYPE html>\n<html lang="fr-CA"><head><meta charset="utf-8">\n' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">\n' +
+    '<title>' + titre + ' – Bons Plans Canada</title>\n<meta name="description" content="' + DESC_SITE + '">\n<meta name="color-scheme" content="light dark">\n' +
+    '<style>' + HTML_DEBUT.match(/<style>([\s\S]*?)<\/style>/)[1] + CSS_SITE + '</style></head><body><div class="cont">\n' +
+    '<header><p style="font-size:1.6rem;font-weight:800;margin:0">Bons Plans Canada</p></header>' + menuSite(actif) +
+    '<main class="texte">' + corps + '</main>' + piedSite + '</div></body></html>\n';
+}
+const CORPS_APROPOS = `<h1>À propos</h1>
+<p><strong>Bons Plans Canada</strong> est un petit site gratuit qui rassemble les meilleures aubaines trouvées au Canada, pour aider les consommateurs à ne pas payer plus cher que nécessaire.</p>
+<h2>Comment les offres sont choisies</h2>
+<p>Nous lisons les offres publiées sur des forums publics de bons plans et dans les promotions de détaillants. Chaque offre est ensuite classée par catégorie (informatique, épicerie, voyage, etc.) à l’aide de mots-clés, puis triée selon le rabais et la fraîcheur. La liste est actualisée chaque heure. Le classement est automatique : aucune offre n’est payée pour apparaître plus haut.</p>
+<h2>À qui s’adresse le site</h2>
+<p>Aux acheteurs du Canada, y compris du Québec, qui cherchent de bonnes affaires en ligne et en magasin. Les prix sont indiqués en dollars canadiens lorsque la source le précise.</p>
+<h2>Liens affiliés</h2>
+<p>${DIVULGATION} Les prix et la disponibilité peuvent changer : vérifiez toujours les détails sur le site du marchand.</p>
+<h2>Nous joindre</h2>
+<p class="avis">Courriel : <strong>contact@VOTRE-DOMAINE</strong> <em>(adresse temporaire : à remplacer avant la publication du site)</em></p>`;
+const CORPS_CONFID = `<h1>Politique de confidentialité</h1>
+<p>Dernière mise à jour : <span id="d">novembre 2026</span>. Cette politique est rédigée dans l’esprit de la LPRPDE (Canada) et de la Loi 25 (Québec).</p>
+<h2>Ce que nous collectons</h2>
+<p>Rien. Le site n’a pas de compte utilisateur, pas de formulaire et ne collecte aucun renseignement personnel. La recherche et les filtres fonctionnent uniquement dans votre navigateur : ce que vous tapez n’est pas envoyé à nos serveurs.</p>
+<h2>Témoins (cookies) et suivi</h2>
+<p>Nous n’utilisons aucun témoin de suivi, aucune publicité ciblée et aucun outil d’analyse tiers.</p>
+<h2>Liens affiliés et sites externes</h2>
+<p>${DIVULGATION} Lorsque vous cliquez sur un lien vers un marchand ou un réseau d’affiliation, ce site externe peut déposer ses propres témoins et appliquer sa propre politique de confidentialité. Nous ne contrôlons pas ces sites.</p>
+<h2>Vos droits</h2>
+<p>Comme nous ne détenons aucun renseignement personnel vous concernant, il n’y a rien à consulter, corriger ou supprimer. Pour toute question : <strong>contact@VOTRE-DOMAINE</strong> <em>(adresse temporaire : à remplacer avant la publication)</em>.</p>`;
+function ecrireSite(donnees) {
+  const dossier = path.join(DIR, 'site');
+  fs.mkdirSync(dossier, { recursive: true });
+  const debut = HTML_DEBUT
+    .replace('<title>Bons plans</title>', () => '<title>Bons Plans Canada – Les meilleures aubaines au Canada</title>\n<meta name="description" content="' + DESC_SITE + '">\n<meta name="color-scheme" content="light dark">')
+    .replace('</style>', () => CSS_SITE + '</style>')
+    .replace('<header><h1>Bons plans</h1>', () => menuSite('a') + '\n<header><h1>Bons Plans Canada</h1><p class="hero">Les meilleures aubaines au Canada, triées pour vous, mises à jour chaque heure</p>')
+    .replace(/<\/div>\s*<script type="application\/json"/, (m) => piedSite + '\n' + m);
+  fs.writeFileSync(path.join(dossier, 'index.html'), debut + donnees + HTML_FIN);
+  fs.writeFileSync(path.join(dossier, 'a-propos.html'), pageSite('À propos', 'p', CORPS_APROPOS));
+  fs.writeFileSync(path.join(dossier, 'confidentialite.html'), pageSite('Confidentialité', 'c', CORPS_CONFID));
+  fs.writeFileSync(path.join(dossier, 'robots.txt'), 'User-agent: *\nAllow: /\n');
+}
+
 // ---------- 6. Programme principal ----------
 async function main() {
   const sources = lireJson('sources.json');
@@ -235,6 +294,7 @@ async function main() {
   const ordre = R.ordre.concat('Autre').filter((v, i, a) => a.indexOf(v) === i);
   const donnees = JSON.stringify({ deals, ordre, genere: maintenant }).replace(/</g, '\\u003c');
   fs.writeFileSync(path.join(DIR, 'bons-plans.html'), HTML_DEBUT + donnees + HTML_FIN);
-  console.log(deals.length + ' offres -> bons-plans.html');
+  ecrireSite(donnees);
+  console.log(deals.length + ' offres -> bons-plans.html + site/');
 }
 main().catch((e) => { console.error(e.message); process.exit(1); });

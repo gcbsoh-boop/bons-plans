@@ -5,3 +5,4 @@
 4. Cliquez sur une offre pour l'ouvrir. Pour mettre à jour, double-cliquez à nouveau.
 La page se met aussi à jour toute seule toutes les heures (tâche Windows « Bons Plans Canada - mise a jour »). Pour l'arrêter : ouvrez le « Planificateur de tâches » et supprimez cette tâche.
 (Il faut Node.js. Mots-clés : categories.json. Sources : sources.json.)
+Le site public (pour l'affiliation) est créé dans le dossier site/ à chaque mise à jour. Avant de le publier, remplacez contact@VOTRE-DOMAINE dans bons-plans.js.

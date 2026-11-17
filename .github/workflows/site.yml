@@ -8,7 +8,7 @@ on:
     branches: [master, main]
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -36,8 +36,33 @@ jobs:
           key: offres-${{ github.run_id }}
           restore-keys: offres-
 
+      # Recupere l'historique des prix depuis la branche "donnees" (s'il existe)
+      - name: Restaurer l'historique
+        run: |
+          if git ls-remote --exit-code --heads origin donnees >/dev/null 2>&1; then
+            git fetch --depth=1 origin donnees
+            git show FETCH_HEAD:historique.json > historique.json || rm -f historique.json
+          fi
+
       - name: Collecte des bons plans
         run: node bons-plans.js
+
+      # Sauvegarde l'historique dans la branche "donnees" (une seule fiche, sans le reste du projet)
+      - name: Sauvegarder l'historique
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f historique.json ]; then
+            tmp=$(mktemp -d)
+            cp historique.json "$tmp/"
+            cd "$tmp"
+            git init -q -b donnees
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add historique.json
+            git commit -q -m "Mise a jour de l'historique des prix"
+            git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" donnees
+          fi
 
       - uses: actions/configure-pages@v5
 

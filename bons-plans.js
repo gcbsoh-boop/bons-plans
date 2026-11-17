@@ -209,19 +209,111 @@ footer.pied{margin-top:40px;padding-top:18px;border-top:1px solid var(--ligne);c
 footer.pied a{color:var(--sec)}
 .texte{max-width:760px;margin:0 auto;padding:8px 0}.texte h1{margin-top:28px}.texte a{color:var(--acc)}
 .avis{background:var(--carte);border:1px dashed var(--acc);border-radius:12px;padding:12px 16px}
+.large{max-width:900px}
+#ajout{display:flex;gap:8px;margin:12px 0 20px}#ajout input{flex:1;min-width:0;font:inherit;font-size:1.2rem;padding:14px 16px;border:2px solid var(--ligne);border-radius:14px;background:var(--carte);color:var(--txt)}
+#ajout button{font:inherit;font-weight:700;padding:0 20px;border:0;border-radius:14px;background:var(--acc);color:#fff;cursor:pointer}
+.souhait{background:var(--carte);border:1px solid var(--ligne);border-radius:16px;padding:16px;margin-bottom:14px}
+.souhait .tete{display:flex;justify-content:space-between;gap:10px;align-items:center}.souhait h3{margin:0;font-size:1.3rem}
+.souhait .x{font:inherit;border:0;background:none;color:var(--sec);cursor:pointer;font-size:1.2rem}
+.conseil{display:inline-block;font-weight:700;padding:6px 14px;border-radius:99px;margin:10px 0;color:#fff}
+.conseil.vert{background:var(--vert)}.conseil.orange{background:#d9780f}.conseil.gris{background:#6b7380}
+.souhait ul{list-style:none;margin:8px 0 0;padding:0}.souhait li{padding:6px 0;border-top:1px solid var(--ligne)}
+.souhait li a{color:var(--txt);text-decoration:none}.souhait li b{color:var(--acc)}
+.petit{color:var(--sec);font-size:.95rem;margin:4px 0}.spark{display:block;margin:6px 0}
 `;
-const menuSite = (actif) => '<nav class="menu" aria-label="Navigation principale">' +
-  [['index.html', 'Aubaines', 'a'], ['a-propos.html', 'À propos', 'p'], ['confidentialite.html', 'Confidentialité', 'c']]
+const menuSite = (actif, local) => '<nav class="menu" aria-label="Navigation principale">' +
+  (local ? [['bons-plans.html', 'Aubaines', 'a'], ['souhaits.html', 'Ma liste', 's']]
+    : [['index.html', 'Aubaines', 'a'], ['souhaits.html', 'Ma liste', 's'], ['a-propos.html', 'À propos', 'p'], ['confidentialite.html', 'Confidentialité', 'c']])
     .map(([h, t, k]) => '<a href="' + h + '"' + (k === actif ? ' aria-current="page"' : '') + '>' + t + '</a>').join('') + '</nav>';
 const piedSite = '<footer class="pied"><p>' + DIVULGATION + '</p><p>Bons Plans Canada · <a href="a-propos.html">À propos</a> · <a href="confidentialite.html">Confidentialité</a></p></footer>';
 const DESC_SITE = 'Les meilleures aubaines au Canada, triées pour vous, mises à jour chaque heure.';
-function pageSite(titre, actif, corps) {
+function pageSite(titre, actif, corps, local) {
   return '<!DOCTYPE html>\n<html lang="fr-CA"><head><meta charset="utf-8">\n' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">\n' +
     '<title>' + titre + ' – Bons Plans Canada</title>\n<meta name="description" content="' + DESC_SITE + '">\n<meta name="color-scheme" content="light dark">\n' +
     '<style>' + HTML_DEBUT.match(/<style>([\s\S]*?)<\/style>/)[1] + CSS_SITE + '</style></head><body><div class="cont">\n' +
-    '<header><p style="font-size:1.6rem;font-weight:800;margin:0">Bons Plans Canada</p></header>' + menuSite(actif) +
-    '<main class="texte">' + corps + '</main>' + piedSite + '</div></body></html>\n';
+    '<header><p style="font-size:1.6rem;font-weight:800;margin:0">Bons Plans Canada</p></header>' + menuSite(actif, local) +
+    '<main class="texte' + (actif === 's' ? ' large' : '') + '">' + corps + '</main>' + (local ? '' : piedSite) + '</div></body></html>\n';
+}
+
+// ---------- 5c. Historique des prix et page « Ma liste » ----------
+const JOURS_HISTO = 365;
+const jourDe = (t) => new Date(t).toISOString().slice(0, 10);
+function majHistorique(deals, maintenant) {
+  const f = path.join(DIR, 'historique.json');
+  let h = [];
+  try { const j = JSON.parse(fs.readFileSync(f, 'utf8')); if (Array.isArray(j)) h = j; } catch { /* premier passage */ }
+  const limite = jourDe(maintenant - JOURS_HISTO * 864e5);
+  h = h.filter((x) => x && x.d >= limite && x.t);
+  const cle = (x) => x.d + '|' + norm(x.t) + '|' + (x.m || '');
+  const vus = new Set(h.map(cle));
+  const auj = jourDe(maintenant);
+  let ajouts = 0;
+  for (const d of deals) {
+    const x = { d: auj, t: d.titre, c: d.categorie, m: d.magasin, p: d.prix, o: d.pct, l: d.lien };
+    if (vus.has(cle(x))) continue;
+    vus.add(cle(x)); h.push(x); ajouts++;
+  }
+  fs.writeFileSync(f, JSON.stringify(h));
+  console.error('Historique : ' + h.length + ' offres (+' + ajouts + ')');
+  // Version compacte pour la page : [jour, titre, catégorie, magasin, prix, % de rabais], seulement les offres avec prix
+  return h.filter((x) => x.p !== null && x.p !== undefined).map((x) => [x.d, x.t.slice(0, 110), x.c, x.m, x.p, x.o]);
+}
+const CORPS_SOUHAITS = String.raw`<h1>Ma liste de souhaits</h1>
+<p class="petit">Écrivez un produit avec vos mots (ex. : télé 55, rtx 4070). On le surveille pour vous. Votre liste reste dans ce navigateur : aucun compte.</p>
+<form id="ajout"><input id="mot" type="text" placeholder="Que voulez-vous acheter ?" aria-label="Produit" autocomplete="off"><button type="submit">Ajouter</button></form>
+<div id="souhaits"></div>
+<p class="petit">Les conseils sont des tendances générales, pas une garantie.</p>
+<script type="application/json" id="donnees-s">__DONNEES__</script>
+<script>
+const D=JSON.parse(document.getElementById('donnees-s').textContent);
+const MOIS=['','janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+const norm=s=>s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+const esc=s=>s.replace(/[.*+?^$\{}()|[\]\\]/g,'\\$&');
+const mre=m=>new RegExp('(^|[^a-z0-9])'+esc(norm(m.trim()))+'(?![a-z0-9])');
+function classer(t){t=norm(t);let best='',max=0;for(const c of D.cfg.ordre_priorite||Object.keys(D.cfg.categories)){const n=(D.cfg.categories[c]||[]).filter(m=>mre(m).test(t)).length;if(n>max){max=n;best=c}}return best}
+function mots(q){return norm(q).split(/[^a-z0-9]+/).filter(Boolean).map(w=>new RegExp('(^|[^a-z0-9])'+esc(w)))}
+const tout=(res,t)=>{t=norm(t);return res.every(r=>r.test(t))};
+function lire(){try{const l=JSON.parse(localStorage.getItem('souhaits')||'[]');return Array.isArray(l)?l:[]}catch(e){return window.__l||[]}}
+function ecrire(l){window.__l=l;try{localStorage.setItem('souhaits',JSON.stringify(l))}catch(e){}}
+function el(tag,cl,txt){const e=document.createElement(tag);if(cl)e.className=cl;if(txt!==undefined)e.textContent=txt;return e}
+const eur=v=>v.toFixed(2).replace('.',',')+' $';
+function jolie(d){const p=d.split('-');return +p[2]+' '+MOIS[+p[1]]+' '+p[0]}
+function spark(pts){const W=160,H=36,v=pts.map(p=>p[1]),lo=Math.min(...v),hi=Math.max(...v),r=hi-lo||1;
+const xy=pts.map((p,i)=>(4+i*(W-8)/(pts.length-1)).toFixed(1)+','+(H-4-(p[1]-lo)/r*(H-8)).toFixed(1)).join(' ');
+const s=document.createElementNS('http://www.w3.org/2000/svg','svg');s.setAttribute('viewBox','0 0 '+W+' '+H);s.setAttribute('width',W);s.setAttribute('height',H);s.setAttribute('class','spark');s.setAttribute('role','img');s.setAttribute('aria-label','Historique des prix');
+const pl=document.createElementNS('http://www.w3.org/2000/svg','polyline');pl.setAttribute('points',xy);pl.setAttribute('fill','none');pl.setAttribute('stroke','currentColor');pl.setAttribute('stroke-width','2');s.append(pl);return s}
+function conseil(cat,courant,minHisto,aOffre){
+const cal=D.cal.categories[cat],mc=new Date().getMonth()+1;
+if(!aOffre)return['gris','\u{1F50E} Pas encore d’offre — on surveille'];
+const bons=cal&&cal.mois||[];
+if((courant!==null&&minHisto!==null&&courant<=minHisto)||bons.includes(mc))return['vert','✅ Achète maintenant'];
+if(!bons.length)return['vert','✅ Achète maintenant'];
+const suiv=bons.slice().sort((a,b)=>((a-mc+12)%12)-((b-mc+12)%12))[0];
+return['orange','⏳ Attends — ça baisse souvent en '+MOIS[suiv]]}
+function carte(q,i){
+const res=mots(q),cat=classer(q);
+const actuels=D.deals.filter(d=>tout(res,d.titre)).sort((a,b)=>(a.prix===null)-(b.prix===null)||a.prix-b.prix);
+const hist=D.hist.filter(h=>tout(res,h[1]));
+const prixAct=actuels.filter(d=>d.prix!==null).map(d=>d.prix),courant=prixAct.length?Math.min(...prixAct):null;
+let mini=null,quand='';const parJour={};
+hist.forEach(h=>{if(mini===null||h[4]<mini){mini=h[4];quand=h[0]}parJour[h[0]]=Math.min(parJour[h[0]]??Infinity,h[4])});
+const pts=Object.keys(parJour).sort().map(d=>[d,parJour[d]]);
+const c=el('div','souhait'),t=el('div','tete');t.append(el('h3','',q));
+const x=el('button','x','✕');x.title='Retirer';x.setAttribute('aria-label','Retirer '+q);x.onclick=()=>{const l=lire();l.splice(i,1);ecrire(l);rendre()};t.append(x);c.append(t);
+const [k,txt]=conseil(cat,courant,mini,actuels.length>0);c.append(el('div','conseil '+k,txt));
+if(mini!==null)c.append(el('p','petit','Prix le plus bas vu : '+eur(mini)+' ('+jolie(quand)+')'));
+if(pts.length>=2)c.append(spark(pts));
+if(actuels.length){const u=el('ul');actuels.slice(0,5).forEach(d=>{const li=el('li');const a=el('a','',d.titre.replace(/^(\s*\[[^\]]*\])+\s*/,'').slice(0,90));a.href=d.lien;a.target='_blank';a.rel='noopener noreferrer';li.append(a);if(d.prix!==null)li.append(document.createTextNode(' — '),el('b','',eur(d.prix)));if(d.magasin)li.append(document.createTextNode(' · '+d.magasin));u.append(li)});c.append(u)}
+return c}
+function rendre(){const z=document.getElementById('souhaits');z.innerHTML='';const l=lire();
+if(!l.length){z.append(el('p','petit','Votre liste est vide. Ajoutez un produit ci-dessus.'));return}
+l.forEach((q,i)=>z.append(carte(q,i)))}
+document.getElementById('ajout').onsubmit=e=>{e.preventDefault();const i=document.getElementById('mot'),v=i.value.trim();if(!v)return;const l=lire();if(!l.includes(v))l.push(v);ecrire(l);i.value='';rendre()};
+(D.hist?Promise.resolve(D.hist):fetch('historique.json').then(r=>r.json()).catch(()=>[])).then(h=>{D.hist=h;rendre()});
+</script>`;
+function pageSouhaits(donnees, local) {
+  return pageSite('Ma liste', 's', CORPS_SOUHAITS.replace('__DONNEES__', () => donnees), local);
 }
 const CORPS_APROPOS = `<h1>À propos</h1>
 <p><strong>Bons Plans Canada</strong> est un petit site gratuit qui rassemble les meilleures aubaines trouvées au Canada, pour aider les consommateurs à ne pas payer plus cher que nécessaire.</p>
@@ -243,7 +335,7 @@ const CORPS_CONFID = `<h1>Politique de confidentialité</h1>
 <p>${DIVULGATION} Lorsque vous cliquez sur un lien vers un marchand ou un réseau d’affiliation, ce site externe peut déposer ses propres témoins et appliquer sa propre politique de confidentialité. Nous ne contrôlons pas ces sites.</p>
 <h2>Vos droits</h2>
 <p>Comme nous ne détenons aucun renseignement personnel vous concernant, il n’y a rien à consulter, corriger ou supprimer. Pour toute question : <a href="mailto:christiansoh771@gmail.com"><strong>christiansoh771@gmail.com</strong></a>.</p>`;
-function ecrireSite(donnees) {
+function ecrireSite(donnees, souhaits, histCompact) {
   const dossier = path.join(DIR, 'site');
   fs.mkdirSync(dossier, { recursive: true });
   const debut = HTML_DEBUT
@@ -252,6 +344,8 @@ function ecrireSite(donnees) {
     .replace('<header><h1>Bons plans</h1>', () => menuSite('a') + '\n<header><h1>Bons Plans Canada</h1><p class="hero">Les meilleures aubaines au Canada, triées pour vous, mises à jour chaque heure</p>')
     .replace(/<\/div>\s*<script type="application\/json"/, (m) => piedSite + '\n' + m);
   fs.writeFileSync(path.join(dossier, 'index.html'), debut + donnees + HTML_FIN);
+  fs.writeFileSync(path.join(dossier, 'souhaits.html'), pageSouhaits(souhaits, false));
+  fs.writeFileSync(path.join(dossier, 'historique.json'), JSON.stringify(histCompact));
   fs.writeFileSync(path.join(dossier, 'a-propos.html'), pageSite('À propos', 'p', CORPS_APROPOS));
   fs.writeFileSync(path.join(dossier, 'confidentialite.html'), pageSite('Confidentialité', 'c', CORPS_CONFID));
   fs.writeFileSync(path.join(dossier, 'robots.txt'), 'User-agent: *\nAllow: /\n');
@@ -293,8 +387,14 @@ async function main() {
   });
   const ordre = R.ordre.concat('Autre').filter((v, i, a) => a.indexOf(v) === i);
   const donnees = JSON.stringify({ deals, ordre, genere: maintenant }).replace(/</g, '\\u003c');
-  fs.writeFileSync(path.join(DIR, 'bons-plans.html'), HTML_DEBUT + donnees + HTML_FIN);
-  ecrireSite(donnees);
-  console.log(deals.length + ' offres -> bons-plans.html + site/');
+  const histCompact = majHistorique(deals, maintenant);
+  const cal = lireJson('calendrier.json');
+  const base = { deals: deals.map((d) => ({ titre: d.titre, lien: d.lien, prix: d.prix, magasin: d.magasin })), cal, cfg: { categories: cfg.categories, ordre_priorite: cfg.ordre_priorite } };
+  const sjson = (o) => JSON.stringify(o).replace(/</g, '\\u003c');
+  const debutLocal = HTML_DEBUT.replace('</style>', () => CSS_SITE + '</style>').replace('<header>', () => menuSite('a', true) + '\n<header>');
+  fs.writeFileSync(path.join(DIR, 'bons-plans.html'), debutLocal + donnees + HTML_FIN);
+  fs.writeFileSync(path.join(DIR, 'souhaits.html'), pageSouhaits(sjson({ ...base, hist: histCompact }), true));
+  ecrireSite(donnees, sjson(base), histCompact);
+  console.log(deals.length + ' offres -> bons-plans.html + souhaits.html + site/');
 }
 main().catch((e) => { console.error(e.message); process.exit(1); });

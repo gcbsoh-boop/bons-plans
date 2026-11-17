@@ -1,0 +1,14 @@
+{
+  "note": "Tendances générales au Canada : les rabais varient d'une année à l'autre. Mois de 1 (janvier) à 12 (décembre).",
+  "categories": {
+    "Électronique": { "mois": [11, 12], "raison": "Vendredi fou (Black Friday) et Boxing Day" },
+    "Vêtements": { "mois": [1, 2, 7], "raison": "Soldes d'hiver et d'été" },
+    "Sport": { "mois": [9, 3], "raison": "Fin de saison, plein air" },
+    "Maison": { "mois": [8, 9], "raison": "BBQ et mobilier de fin d'été" },
+    "Informatique": { "mois": [11, 7], "raison": "Vendredi fou et rentrée" },
+    "Jeux vidéo": { "mois": [11, 6], "raison": "Vendredi fou et soldes d'été" },
+    "Épicerie": { "mois": [], "raison": "Pas de saison : suivez les circulaires" },
+    "Voyage": { "mois": [1, 9], "raison": "Réservations d'hiver et d'automne" },
+    "Auto": { "mois": [12], "raison": "Liquidation de fin d'année" }
+  }
+}

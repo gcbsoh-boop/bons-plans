@@ -232,7 +232,7 @@ const CORPS_APROPOS = `<h1>À propos</h1>
 <h2>Liens affiliés</h2>
 <p>${DIVULGATION} Les prix et la disponibilité peuvent changer : vérifiez toujours les détails sur le site du marchand.</p>
 <h2>Nous joindre</h2>
-<p class="avis">Courriel : <strong>contact@VOTRE-DOMAINE</strong> <em>(adresse temporaire : à remplacer avant la publication du site)</em></p>`;
+<p class="avis">Courriel : <a href="mailto:christiansoh771@gmail.com"><strong>christiansoh771@gmail.com</strong></a></p>`;
 const CORPS_CONFID = `<h1>Politique de confidentialité</h1>
 <p>Dernière mise à jour : <span id="d">novembre 2026</span>. Cette politique est rédigée dans l’esprit de la LPRPDE (Canada) et de la Loi 25 (Québec).</p>
 <h2>Ce que nous collectons</h2>
@@ -242,7 +242,7 @@ const CORPS_CONFID = `<h1>Politique de confidentialité</h1>
 <h2>Liens affiliés et sites externes</h2>
 <p>${DIVULGATION} Lorsque vous cliquez sur un lien vers un marchand ou un réseau d’affiliation, ce site externe peut déposer ses propres témoins et appliquer sa propre politique de confidentialité. Nous ne contrôlons pas ces sites.</p>
 <h2>Vos droits</h2>
-<p>Comme nous ne détenons aucun renseignement personnel vous concernant, il n’y a rien à consulter, corriger ou supprimer. Pour toute question : <strong>contact@VOTRE-DOMAINE</strong> <em>(adresse temporaire : à remplacer avant la publication)</em>.</p>`;
+<p>Comme nous ne détenons aucun renseignement personnel vous concernant, il n’y a rien à consulter, corriger ou supprimer. Pour toute question : <a href="mailto:christiansoh771@gmail.com"><strong>christiansoh771@gmail.com</strong></a>.</p>`;
 function ecrireSite(donnees) {
   const dossier = path.join(DIR, 'site');
   fs.mkdirSync(dossier, { recursive: true });

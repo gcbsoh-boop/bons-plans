@@ -6,3 +6,4 @@
 La page se met aussi à jour toute seule toutes les heures (tâche Windows « Bons Plans Canada - mise a jour »). Pour l'arrêter : ouvrez le « Planificateur de tâches » et supprimez cette tâche.
 (Il faut Node.js. Mots-clés : categories.json. Sources : sources.json.)
 Le site public (pour l'affiliation) est créé dans le dossier site/ à chaque mise à jour. Avant de le publier, remplacez contact@VOTRE-DOMAINE dans bons-plans.js.
+Site en ligne : https://gcbsoh-boop.github.io/bons-plans/ (mis à jour toutes les heures par GitHub, même PC éteint).
